@@ -72,7 +72,11 @@ async def open_ticket(interaction:discord.Interaction, category:discord.Category
 async def close_ticket(user:discord.Member, channel:discord.TextChannel):
     overwrites = {
         #revoke viewing message from user opening the ticket
-        user: discord.PermissionOverwrite(read_messages=False)
+        user: discord.PermissionOverwrite(read_messages=False),
+        # make sure all other members cant see the ticket
+        channel.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        # give the bot permission to view the ticket
+        channel.guild.me: discord.PermissionOverwrite(read_messages=True),
     }
     await channel.edit(overwrites=overwrites)
 
@@ -93,6 +97,15 @@ async def ticket_setup(interaction:discord.Interaction, message:discord.Message)
                                             "simply delete the old ticket message", ephemeral=True)
     await message.channel.send(embed=embed, view=view)
     await message.delete()
+
+@client.tree.command()
+async def help(interaction:discord.Interaction):
+    """Give instruction on how to set up the ticket system"""
+    embed = discord.Embed(title='Setting up Ticket')
+    embed.description=(f"Start by writing a message that you want the bot to display for the Ticket\n"
+                       f"Then right click the message, in app and convert message to ticket\n"
+                       f"The bot should work and will create ticket channels in the same category where the message is in")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 try:
     client.run(bot_token)
