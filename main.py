@@ -89,11 +89,11 @@ class CustomClient(discord.Client):
         # Syncs command tree to the guild.
         self.tree.copy_global_to(guild=MY_GUILD)
         #load all saved ticket opening message with its id
-        for i in server_id:
-            self.add_view(OpenTicket(),message_id=int(server_id[i]))
         #load the rest of the view that doesnt have the id saved
         #only message that doesnt have id saved is the closing ticket message
         self.add_view(CloseTicket())
+        for i in server_id:
+            self.add_view(OpenTicket(),message_id=int(server_id[i]))
         await self.tree.sync(guild=MY_GUILD)
 
     async def on_ready(self):
