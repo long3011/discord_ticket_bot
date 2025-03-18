@@ -2,7 +2,7 @@ import discord
 import json
 import re
 
-MY_GUILD = discord.Object(id=1335651270681428102)
+MY_GUILD = discord.Object(id=[replace with ur own server id])
 intents = discord.Intents.default()
 intents.message_content = True
 
