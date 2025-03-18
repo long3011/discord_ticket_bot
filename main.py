@@ -1,5 +1,6 @@
 import discord
 import json
+import re
 
 MY_GUILD = discord.Object(id=1335651270681428102)
 intents = discord.Intents.default()
@@ -12,24 +13,29 @@ try:
         f.close()
 except FileNotFoundError:
     print('token.txt not found')
-# Load list of saved server into variable
-try:
-    with open('server_id.json', 'r') as r:
-        server_id = json.load(r)
-        r.close()
-except FileNotFoundError:
-    print('server_id.txt not found')
 
 
 #View object to save to the bot for persistent even after connection restart
-class OpenTicket(discord.ui.View):
-    #creating the view for initial buttons
-    def __init__(self):
-        super().__init__(timeout=None)
-    #button for opening ticket
-    @discord.ui.button(label='Open Ticket', style=discord.ButtonStyle.green, custom_id='ticket_bot:open')
-    async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        channel=await open_ticket(interaction)
+class OpenTicket(discord.ui.DynamicItem[discord.ui.Button], template=r'button:user:(?P<id>[0-9]+)'):
+    def __init__(self, user_id: int) -> None:
+        super().__init__(
+            discord.ui.Button(
+                label='Open Ticket',
+                style=discord.ButtonStyle.green,
+                custom_id=f'button:user:{user_id}',
+            )
+        )
+        self.user_id: int = user_id
+
+    # This is called when the button is clicked and the custom_id matches the template.
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match: re.Match[str], /):
+        user_id = int(match['id'])
+        return cls(user_id)
+
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        channel = await open_ticket(interaction)
         await interaction.response.send_message(f"ticket opened, go to {channel.mention}", ephemeral=True)
 
 #Ticket closing object, sent in every ticket channel creation to close the channel
@@ -85,15 +91,12 @@ class CustomClient(discord.Client):
         self.tree = discord.app_commands.CommandTree(self)
 
     async def setup_hook(self):
-        global server_id
         # Syncs command tree to the guild.
         self.tree.copy_global_to(guild=MY_GUILD)
-        #load all saved ticket opening message with its id
-        #load the rest of the view that doesnt have the id saved
-        #only message that doesnt have id saved is the closing ticket message
+        #load dynamic open ticket button
+        self.add_dynamic_items(OpenTicket)
+        #load dynamic view of closing ticket
         self.add_view(CloseTicket())
-        for i in server_id:
-            self.add_view(OpenTicket(),message_id=int(server_id[i]))
         await self.tree.sync(guild=MY_GUILD)
 
     async def on_ready(self):
@@ -114,20 +117,14 @@ async def ticket_setup(interaction:discord.Interaction, message:discord.Message)
     #convert message content into embed
     if message.content:
         embed.description = message.content
-    view=OpenTicket()
+    view=discord.ui.View(timeout=None)
+    view.add_item(OpenTicket(interaction.user.id))
     await interaction.response.send_message("Ticket setup successful.\n"
                                             "If you want to make a new ticket message "
                                             "simply delete the old ticket message", ephemeral=True)
     #save ticket message into a file to "restart proof" it
-    end_message=await message.channel.send(embed=embed, view=view)
+    await message.channel.send(embed=embed, view=view)
     await message.delete()
-    server_id[interaction.guild.id] = end_message.id
-    with open("server_id.json", "r+") as outfile:
-        data = json.load(outfile)
-        data[str(interaction.guild.id)] = end_message.id
-        outfile.seek(0)
-        json.dump(data, outfile, indent=4)
-        outfile.close()
 
 @client.tree.context_menu(name='Refresh Ticket')
 async def ticket_refresh(interaction:discord.Interaction, message:discord.Message):
@@ -137,18 +134,12 @@ async def ticket_refresh(interaction:discord.Interaction, message:discord.Messag
         await interaction.response.send_message("You don't have permission to do that.", ephemeral=True)
         return
 
-    view=OpenTicket()
+    view = discord.ui.View(timeout=None)
+    view.add_item(OpenTicket(interaction.user.id))
     await interaction.response.send_message("Ticket Refreshed!", ephemeral=True)
-    # save ticket message into a file to "restart proof" it
-    end_message=await message.channel.send(embed=embed, view=view)
+    await message.channel.send(embed=embed, view=view)
+    # delete the original message
     await message.delete()
-    server_id[str(interaction.guild.id)] = end_message.id
-    with open("server_id.json", "r+") as outfile:
-        data = json.load(outfile)
-        data[interaction.guild.id] = end_message.id
-        outfile.seek(0)
-        json.dump(data, outfile, indent=4)
-        outfile.close()
 
 @client.tree.command()
 async def help(interaction:discord.Interaction):
